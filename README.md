@@ -1,115 +1,145 @@
-# GitHub Repository Uploader
+# github-uploader
 
-A powerful, **GUI-driven Bash script** for managing GitHub repositories with an intuitive graphical interface. Streamline your GitHub workflow with features for creating, updating, cloning repositories, and managing your account - all through a simple point-and-click interface.
+**Checks a project for personal info and secrets, then pushes it to GitHub with its own push-only SSH key.**
 
-![Language](https://img.shields.io/badge/Language-Bash-green.svg)
-![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)
+![Status](https://img.shields.io/badge/status-beta-yellow)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![Platform](https://img.shields.io/badge/platform-Linux-lightgrey)
+![OpenSSH](https://img.shields.io/badge/uses-git%20%2B%20OpenSSH-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+![ghup check output](docs/images/check.png)
+
+## What is github-uploader?
+
+Before a public upload, it is easy to miss a home path, a private note, a token or an AI credit line. Old commits and images can leak them too.
+`ghup` runs safety checks on every file and every old commit, shows the exact file list, and pushes only after you say yes.
+
+**It never holds a key that can create or delete repos: its own SSH key can only push.**
+
+| You do | The tool does |
+|---|---|
+| Create an empty repo on github.com | Checks, commits, pushes, and verifies GitHub matches your folder |
+| Type your passphrase once | Keeps the key unlocked for 15 minutes in its own ssh-agent |
+| Rotate the key every 7 days | Blocks pushes with an older key |
 
 ## Features
 
-### Repository Management
-- **Create New Repositories**: Upload local projects to GitHub with custom names, descriptions, licenses, and visibility.
-- **Update Existing Repositories**: Push changes with automatic commit messages.
-- **Clone Repositories**: Clone any repo with progress tracking.
-- Added manual license function
+- **10 safety checks**: personal info, secrets, private notes, AI credit lines, images, unreadable files, repo name, `.gitignore`, symlinks, README layout.
+- **Full history scan**: old file versions and commit messages count, because GitHub keeps them.
+- **Masked output**: personal values are shown as `a…e`, never in full.
+- **Review before push**: shows the exact `git status` list; any file changed after the checks stops the upload.
+- **Own SSH key**: ed25519 with a passphrase, used through its own ssh-agent. `~/.ssh` and `~/.ssh/config` are never used.
+- **Pinned GitHub host key**: connects only to GitHub's published ed25519 key, over port 443.
+- **Dry run**: shows every step and changes nothing.
+- **No dependencies**: Python standard library, git and OpenSSH.
 
-### Repository Insights
-- **View Repo Information**: Stars, forks, issues, creation date, and more. (not tested yet)
-- **Check Issues**: Open/closed issue counts at a glance.
-- **Folder Content Preview**: File counts, sizes, and structure before upload.
+## How it works
 
-### Account Management
-- **Secure Credential Storage**: Tokens stored with proper file permissions.
-- **Token Validation**: Automatic validation of GitHub credentials.
-- **Easy Management**: Add, update, or remove tokens seamlessly.
-
-## Prerequisites
-
-- git - Version control system
-- curl - HTTP client for API calls
-- jq - JSON processor for API responses
-- zenity - GUI dialog boxes for user interaction
-
-Ensure the following packages are installed:
-
-```bash
-sudo apt update
-sudo apt install git curl jq zenity
+```mermaid
+flowchart LR
+    A[Pick folder] --> B[Checks]
+    B --> C[Review file list]
+    C --> D[Repo exists?]
+    D --> E[Commit]
+    E --> F[Push]
+    F --> G[Verify]
+    B -- problem --> X[Stop]
+    C -- you say no --> X
 ```
 
-GitHub Token: create a Personal Access Token with repo scope.
+## Quick start
 
-## Usage
+**Requirements:** Linux, Python 3.11+, git, OpenSSH. exiftool is optional (checks image metadata).
 
-Run from any directory:
+**1. System packages**
 
-```bash
-./github_uploader.sh
+| Distro | Command |
+|---|---|
+| Arch | `sudo pacman -S --needed git openssh python perl-image-exiftool` |
+| Debian / Ubuntu | `sudo apt install git openssh-client python3 libimage-exiftool-perl` |
+| Fedora | `sudo dnf install git openssh-clients python3 perl-Image-ExifTool` |
+| openSUSE | `sudo zypper install git openssh python3 exiftool` |
+
+**2. Get the app** (no Python packages needed)
+
+```sh
+git clone https://github.com/Muzasio/github-repo-uploader.git ~/.local/share/github-uploader
 ```
 
-or set it in the Nautilus scripts folder to make it appear in the context menu (recommended).
+**3. Add the `ghup` command**
 
-**Workflow**
-- Right click on the folder you want to upload as a repo.
-- Make sure it has all the content.
-- Enter your credentials when prompted (saved securely).
-- Preview folder contents.
-- Choose an action from the menu:
-  - Create New Repository
-  - Update Existing Repository
-  - Clone Repository
-  - View Repository Info
-  - Check Issues
-  - Manage Account Settings
+```sh
+mkdir -p ~/.local/bin
+printf '#!/bin/sh\nexec python3 -I "$HOME/.local/share/github-uploader/cli.py" "$@"\n' > ~/.local/bin/ghup
+chmod 755 ~/.local/bin/ghup
+```
 
-### Advanced Features
+`~/.local/bin` must be on your `PATH`.
 
-**Logging**
-- Logs saved in `/tmp/github_uploader_YYYYMMDD_HHMMSS.log`.
-- Includes API requests, Git outputs, and errors.
+**4. First run**
 
-**Error Handling**
-- Handles common issues:
-  - Network failures
-  - Invalid credentials
-  - API rate limits
-  - Repository conflicts
-  - File permission issues
+```sh
+ghup setup              # your GitHub name, no-reply email, private folder
+ghup key new            # make the key, then add it on github.com
+cd <your project>
+ghup upload . --dry-run # practice run, changes nothing
+ghup upload .           # real upload, asks before each change
+```
 
-**GitHub API**
-- Uses REST API v3.
-- Handles authentication, JSON parsing, and error codes.
+**Remove it**
 
-Tested on Pop!_OS only (using Nautilus).
+```sh
+rm ~/.local/bin/ghup
+rm -rf ~/.local/share/github-uploader
+rm -rf ~/.config/github-uploader ~/.local/state/github-uploader   # settings and the tool's key
+```
 
-## Important Security Considerations
+Then delete the key on github.com/settings/keys.
 
-This script is designed with intentional security simplifications for individual use:
+## Settings
 
-- **Plain Text Storage**: Credentials are stored in plain text configuration files
-- **Token Visibility**: GitHub tokens may be visible in process lists during execution
-- **Local Logging**: API responses and operations are logged to local files
-- **No Encryption**: No encryption is applied to stored credentials
+Set by `ghup setup`, stored in `~/.config/github-uploader/config.toml` (mode 600), outside every repo.
 
-### Intended Audience
+| Setting | Meaning |
+|---|---|
+| `github_name` | Your GitHub user name |
+| `email` | Your GitHub no-reply email, used as the commit author |
+| `devlog_dir` | A private folder: never uploaded from, never linked to |
+| `private_words` | Extra words that must never appear in an uploaded file |
+| `rotate_days` | Key age limit, default 7 |
+| `unlock_minutes` | How long the key stays unlocked, default 15 |
+| `skip_checks` | Check names to turn off |
 
-This tool is specifically designed for:
-- Individual developers
-- Personal projects
-- Learning and educational purposes
-- Quick prototyping and scripting
+## Known limits
 
-### Not suitable for
+- The tool cannot create repos. Create an empty one on github.com first.
+- Checks find known patterns only. A name or word they do not know gets through: add it to `private_words`.
+- Images, binary files and files over 5 MB are not read. You must confirm each one by hand.
+- Binary or big files in **old commits** are not listed.
+- `.gitignore` does not remove files that were already committed.
+- Command line only.
 
-- Enterprise environments
-- Team projects with shared credentials
-- Production systems requiring high security
-- Environments with strict compliance requirements
+## Troubleshooting
 
-### Disclaimer
+| Message | Fix |
+|---|---|
+| `no config yet: run ghup setup` | Run `ghup setup` |
+| `no SSH key yet: run ghup key new` | Run `ghup key new` |
+| `the key is N days old (limit 7)` | Run `ghup key rotate` |
+| `GitHub did not accept the key` | Add the shown key on github.com/settings/ssh/new, then run `ghup key new` again |
+| `... not found` at the Repo step | Create the repo on github.com, empty |
+| `ghup: command not found` | Add `~/.local/bin` to your `PATH` |
 
-This tool is provided as-is for individual developers. Users are responsible for:
-- Implementing additional security measures as needed (encryption or hashing)
-- Safeguarding their GitHub credentials
-- Understanding the security implications of plain text storage
-- Using appropriate security practices for their environment
+## Status
+
+- **Tested**: 55 unit tests on Python 3.11 and 3.14; one real upload to GitHub; the checks, the pipeline and the SSH key (15-minute unlock, 7-day limit) on an Arch-based distro.
+- **Not tested yet**: Debian, Fedora and openSUSE; `ghup key rotate` against GitHub.
+- **Planned**: a small Tk window.
+
+## License
+
+[MIT](LICENSE)
+
+> [!WARNING]
+> The checks lower the risk of a leak but cannot find everything. Always read the file list before you say yes.

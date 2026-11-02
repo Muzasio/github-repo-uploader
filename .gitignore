@@ -1,0 +1,21 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# never upload settings, keys or state (they live in ~/.config and ~/.local/state anyway)
+config.toml
+*.key
+*.pem
+id_*
+ghup_ed25519*
+.env
+
+# leftovers
+*.bak
+*.swp
+*~
+*.log
+
+# Docs stay local; only the README screenshot folder is uploaded
+/docs/*
+!/docs/images/
